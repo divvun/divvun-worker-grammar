@@ -8,6 +8,7 @@ use poem::{
     web::{Data, Html, Json},
     EndpointExt, IntoResponse, Route, Server,
 };
+use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Arc};
 use subterm::{SubprocessHandler as _, SubprocessPool};
 
@@ -16,11 +17,29 @@ struct ProcessInput {
     text: String,
 }
 
+#[derive(Deserialize, Serialize, Clone)]
+pub struct GramcheckErrResponse {
+    pub error_text: String,
+    pub start_index: u32,
+    pub end_index: u32,
+    pub error_code: String,
+    pub description: String,
+    pub suggestions: Vec<String>,
+    pub title: String,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub struct GramcheckResponse {
+    pub text: String,
+    pub errs: Vec<GramcheckErrResponse>,
+}
+
 #[handler]
 async fn process(
     Data(pool): Data<&Arc<SubprocessPool>>,
     Json(body): Json<ProcessInput>,
 ) -> impl IntoResponse {
+    let text = body.text.trim();
     let mut bundle = match pool.acquire().await {
         Ok(bundle) => bundle,
         Err(e) => {
@@ -29,12 +48,39 @@ async fn process(
         }
     };
 
-    bundle.write_line(&body.text).await.unwrap();
+    bundle.write_line(text).await.unwrap();
     bundle.flush().await.unwrap();
     let line = bundle.read_line().await.unwrap();
 
     let json: serde_json::Value = serde_json::from_str(&line).unwrap();
-    Json(json).into_response()
+    let result = json
+        .get("errs")
+        .and_then(|errs| errs.as_array())
+        .map(|x| {
+            x.iter()
+                .map(|x| GramcheckErrResponse {
+                    error_text: x[0].as_str().unwrap().to_string(),
+                    start_index: x[1].as_i64().unwrap() as u32,
+                    end_index: x[2].as_i64().unwrap() as u32,
+                    error_code: x[3].as_str().unwrap().to_string(),
+                    description: x[4].as_str().unwrap().to_string(),
+                    suggestions: x[5]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|s| s.as_str().unwrap().to_string())
+                        .collect(),
+                    title: x[6].as_str().unwrap().to_string(),
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    Json(GramcheckResponse {
+        text: text.to_string(),
+        errs: result,
+    })
+    .into_response()
 }
 
 const PAGE: &str = r#"

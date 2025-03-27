@@ -891,9 +891,10 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 [[package]]
 name = "subterm"
 version = "0.0.1"
-source = "git+https://github.com/bbqsrc/subterm#46cd7634976fb1048a1bb4e778ac07ec0ef9e176"
+source = "git+https://github.com/bbqsrc/subterm#039589eedbfb46d013cb8dabab2a010bd978cf98"
 dependencies = [
  "bstr",
+ "memchr",
  "tokio",
  "tracing",
 ]
