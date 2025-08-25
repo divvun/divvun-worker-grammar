@@ -1,6 +1,6 @@
 use clap::Parser;
 use poem::{
-    handler,
+    get, handler,
     http::StatusCode,
     listener::TcpListener,
     middleware::Cors,
@@ -9,6 +9,7 @@ use poem::{
     EndpointExt, IntoResponse, Route, Server,
 };
 use serde::{Deserialize, Serialize};
+use anyhow::Context;
 use std::{path::Path, sync::Arc};
 use subterm::{SubprocessHandler as _, SubprocessPool};
 
@@ -48,29 +49,54 @@ async fn process(
         }
     };
 
-    bundle.write_line(text).await.unwrap();
-    bundle.flush().await.unwrap();
-    let line = bundle.read_line().await.unwrap();
+    if let Err(e) = bundle.write_line(text).await {
+        tracing::error!("Failed to write to subprocess: {:?}", e);
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    
+    if let Err(e) = bundle.flush().await {
+        tracing::error!("Failed to flush subprocess: {:?}", e);
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    
+    let line = match bundle.read_line().await {
+        Ok(line) => line,
+        Err(e) => {
+            tracing::error!("Failed to read from subprocess: {:?}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
 
-    let json: serde_json::Value = serde_json::from_str(&line).unwrap();
+    let json: serde_json::Value = match serde_json::from_str(&line) {
+        Ok(json) => json,
+        Err(e) => {
+            tracing::error!("Failed to parse JSON response: {:?}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
     let result = json
         .get("errs")
         .and_then(|errs| errs.as_array())
         .map(|x| {
             x.iter()
-                .map(|x| GramcheckErrResponse {
-                    error_text: x[0].as_str().unwrap().to_string(),
-                    start_index: x[1].as_i64().unwrap() as u32,
-                    end_index: x[2].as_i64().unwrap() as u32,
-                    error_code: x[3].as_str().unwrap().to_string(),
-                    description: x[4].as_str().unwrap().to_string(),
-                    suggestions: x[5]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|s| s.as_str().unwrap().to_string())
-                        .collect(),
-                    title: x[6].as_str().unwrap().to_string(),
+                .filter_map(|x| {
+                    let array = x.as_array()?;
+                    if array.len() < 7 {
+                        return None;
+                    }
+                    Some(GramcheckErrResponse {
+                        error_text: array[0].as_str()?.to_string(),
+                        start_index: array[1].as_i64()? as u32,
+                        end_index: array[2].as_i64()? as u32,
+                        error_code: array[3].as_str()?.to_string(),
+                        description: array[4].as_str()?.to_string(),
+                        suggestions: array[5]
+                            .as_array()?
+                            .iter()
+                            .filter_map(|s| s.as_str().map(|s| s.to_string()))
+                            .collect(),
+                        title: array[6].as_str()?.to_string(),
+                    })
                 })
                 .collect::<Vec<_>>()
         })
@@ -137,6 +163,11 @@ async fn process_get(Data(lang): Data<&Language>) -> impl IntoResponse {
     Html(PAGE.replace("%LANG%", &lang.0)).into_response()
 }
 
+#[handler]
+async fn health_check() -> impl IntoResponse {
+    StatusCode::OK
+}
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
@@ -145,11 +176,11 @@ struct Cli {
     bundle_path: String,
 
     /// Host to bind the server to
-    #[arg(long, default_value = "127.0.0.1")]
+    #[arg(long, env = "HOST", default_value = "127.0.0.1")]
     host: String,
 
     /// Port to run the server on
-    #[arg(long, default_value_t = 4000)]
+    #[arg(long, env = "PORT", default_value_t = 4000)]
     port: u16,
 }
 
@@ -162,10 +193,24 @@ async fn main() -> anyhow::Result<()> {
 async fn run(cli: Cli) -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    let path = Path::new(&cli.bundle_path).canonicalize().unwrap();
-    let parent_path = path.parent().unwrap().to_path_buf();
-    let file_name = path.file_name().unwrap().to_str().unwrap().to_string();
-    let lang = file_name.split('.').next().unwrap().to_string();
+    let path = Path::new(&cli.bundle_path)
+        .canonicalize()
+        .context("Failed to canonicalize bundle path")?;
+    let parent_path = path
+        .parent()
+        .context("Bundle path has no parent directory")?
+        .to_path_buf();
+    let file_name = path
+        .file_name()
+        .context("Bundle path has no file name")?
+        .to_str()
+        .context("Bundle file name is not valid UTF-8")?
+        .to_string();
+    let lang = file_name
+        .split('.')
+        .next()
+        .context("Bundle file name is empty")?
+        .to_string();
 
     tracing::info!("Parent path: {}", parent_path.display());
     tracing::info!("File name: {}", file_name);
@@ -182,10 +227,11 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         4,
     )
     .await
-    .unwrap();
+    .context("Failed to create subprocess pool")?;
 
     let app = Route::new()
         .at("/", post(process).get(process_get))
+        .at("/health", get(health_check))
         .data(pool)
         .data(Language(lang))
         .with(Cors::default());
