@@ -1,3 +1,4 @@
+use anyhow::Context;
 use clap::Parser;
 use poem::{
     get, handler,
@@ -9,7 +10,6 @@ use poem::{
     EndpointExt, IntoResponse, Route, Server,
 };
 use serde::{Deserialize, Serialize};
-use anyhow::Context;
 use std::{path::Path, sync::Arc};
 use subterm::{SubprocessHandler as _, SubprocessPool};
 
@@ -53,12 +53,12 @@ async fn process(
         tracing::error!("Failed to write to subprocess: {:?}", e);
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
-    
+
     if let Err(e) = bundle.flush().await {
         tracing::error!("Failed to flush subprocess: {:?}", e);
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
-    
+
     let line = match bundle.read_line().await {
         Ok(line) => line,
         Err(e) => {
@@ -215,19 +215,17 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
     tracing::info!("Parent path: {}", parent_path.display());
     tracing::info!("File name: {}", file_name);
 
+    let bundle_path = cli.bundle_path.clone();
     let pool = subterm::SubprocessPool::new(
         move || {
-            let mut cmd = tokio::process::Command::new("docker");
-            cmd.args(["run", "-i", "-v"])
-                .arg(format!("{}:/data", parent_path.display()))
-                .args(["divvun-checker:latest", "divvun-checker", "-a"])
-                .arg(format!("/data/{}", &file_name));
+            let mut cmd = tokio::process::Command::new("divvun-checker");
+            cmd.arg("-a").arg(&bundle_path);
             cmd
         },
         4,
     )
     .await
-    .context("Failed to create subprocess pool")?;
+    .context("Failed to create subprocess pool - ensure divvun-checker is installed")?;
 
     let app = Route::new()
         .at("/", post(process).get(process_get))
