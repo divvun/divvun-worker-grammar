@@ -9,6 +9,16 @@ COPY Cargo.toml Cargo.lock ./
 # Copy source code
 COPY src ./src
 
+RUN apt-get update && apt-get install -y \
+    curl \
+    cmake \
+    build-essential \
+    bison \
+    flex \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+
 # Build for release
 RUN cargo build --release
 
@@ -34,11 +44,6 @@ RUN apt-get update && apt-get install -y \
     divvun-gramcheck:amd64 \
     hfst:amd64 \
     curl \
-    cmake \
-    build-essential \
-    bison \
-    flex \
-    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder stage
