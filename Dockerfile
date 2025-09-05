@@ -34,18 +34,6 @@ RUN dpkg --add-architecture amd64 && \
     lsb-release \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install the nightly repository script
-RUN wget https://apertium.projectjj.com/apt/install-nightly.sh \
-    && bash install-nightly.sh \
-    && rm install-nightly.sh
-
-# Install divvun dependencies and curl for health checks
-RUN apt-get update && apt-get install -y \
-    divvun-gramcheck:amd64 \
-    hfst:amd64 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy the binary from builder stage
 COPY --from=builder /usr/src/app/target/release/divvun-worker-grammar /usr/local/bin/divvun-worker-grammar
 
