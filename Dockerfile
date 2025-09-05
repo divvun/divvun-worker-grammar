@@ -3,12 +3,6 @@ FROM rust:trixie as builder
 
 WORKDIR /usr/src/app
 
-# Copy manifests
-COPY Cargo.toml Cargo.lock ./
-
-# Copy source code
-COPY src ./src
-
 RUN apt-get update && apt-get install -y \
     curl \
     cmake \
@@ -16,7 +10,15 @@ RUN apt-get update && apt-get install -y \
     bison \
     flex \
     pkg-config \
+    libboost-dev \
+    libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy manifests
+COPY Cargo.toml Cargo.lock ./
+
+# Copy source code
+COPY src ./src
 
 # Build for release
 RUN cargo build --release
