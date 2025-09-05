@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:bullseye as builder
+FROM rust:trixie as builder
 
 WORKDIR /usr/src/app
 
@@ -18,12 +18,11 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-
 # Build for release
 RUN cargo build --release
 
 # Runtime stage
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 # Install required packages
 RUN dpkg --add-architecture amd64 && \
