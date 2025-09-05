@@ -108,6 +108,8 @@ async fn process(
         }
     };
 
+    tracing::debug!("Pipeline output: {}", result_string);
+
     let json: Vec<serde_json::Value> = match serde_json::from_str(&result_string) {
         Ok(json) => json,
         Err(e) => {
