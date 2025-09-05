@@ -34,6 +34,11 @@ RUN apt-get update && apt-get install -y \
     divvun-gramcheck:amd64 \
     hfst:amd64 \
     curl \
+    cmake \
+    build-essential \
+    bison \
+    flex \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder stage
