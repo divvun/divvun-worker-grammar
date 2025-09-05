@@ -33,6 +33,7 @@ RUN dpkg --add-architecture amd64 && \
     gnupg2 \
     ca-certificates \
     lsb-release \
+    libicu76 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder stage
