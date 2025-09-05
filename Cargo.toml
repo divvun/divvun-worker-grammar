@@ -6,11 +6,11 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.86"
 clap = { version = "4.4.18", features = ["derive", "env"] }
-#divvun-runtime = { version = "0.1.0", path = "../divvun-runtime", default-features = false, features = ["mod-speech"] }
+divvun-runtime = { git = "https://github.com/divvun/divvun-runtime", default-features = false, features = ["mod-divvun", "mod-cg3", "mod-hfst"] }
+futures-util = "0.3.31"
 poem = "3.0.1"
 serde = "1.0.203"
 serde_json = "1.0.117"
-subterm = { git = "https://github.com/bbqsrc/subterm", version = "0.0.1" }
 tokio = { version = "1.38.0", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"

@@ -1,17 +1,18 @@
 use anyhow::Context;
 use clap::Parser;
+use divvun_runtime::{modules::Input, util::parse_accept_language, Bundle};
+use futures_util::StreamExt;
 use poem::{
     get, handler,
     http::StatusCode,
     listener::TcpListener,
     middleware::Cors,
     post,
-    web::{Data, Html, Json},
-    EndpointExt, IntoResponse, Route, Server,
+    web::{Data, Html, Json, Query},
+    EndpointExt, IntoResponse, Request, Route, Server,
 };
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Arc};
-use subterm::{SubprocessHandler as _, SubprocessPool};
 
 #[derive(serde::Deserialize)]
 struct ProcessInput {
@@ -35,72 +36,116 @@ pub struct GramcheckResponse {
     pub errs: Vec<GramcheckErrResponse>,
 }
 
+#[derive(Deserialize)]
+struct ProcessQuery {
+    encoding: Option<String>,
+}
+
 #[handler]
 async fn process(
-    Data(pool): Data<&Arc<SubprocessPool>>,
+    Data(bundle): Data<&Arc<Bundle>>,
     Json(body): Json<ProcessInput>,
+    Query(query): Query<ProcessQuery>,
+    req: &Request,
 ) -> impl IntoResponse {
     let text = body.text.trim();
-    let mut bundle = match pool.acquire().await {
-        Ok(bundle) => bundle,
+    let is_utf16 = match query.encoding.as_deref() {
+        Some("utf-16") | None => true,
+        Some("utf-8") => false,
+        Some(enc) => {
+            tracing::error!("Unsupported encoding: {}", enc);
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+    };
+
+    // Extract and parse Accept-Language header for locale configuration
+    let locales = if let Some(accept_lang) = req.header("Accept-Language") {
+        parse_accept_language(accept_lang)
+            .into_iter()
+            .map(|(lang_id, _)| lang_id.to_string())
+            .collect::<Vec<String>>()
+    } else {
+        Vec::new()
+    };
+
+    // Build configuration with locales for suggestions
+    let config = serde_json::json!({
+        "suggest": {
+            "locales": locales,
+            "encoding": if is_utf16 { "utf-16" } else { "utf-8" },
+        }
+    });
+
+    let mut pipeline = match bundle.create(config).await {
+        Ok(pipeline) => pipeline,
         Err(e) => {
-            tracing::error!("{:?}", e);
+            tracing::error!("Failed to create pipeline: {:?}", e);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
-    if let Err(e) = bundle.write_line(text).await {
-        tracing::error!("Failed to write to subprocess: {:?}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
+    let mut stream = pipeline.forward(Input::String(text.to_string())).await;
 
-    if let Err(e) = bundle.flush().await {
-        tracing::error!("Failed to flush subprocess: {:?}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
-    let line = match bundle.read_line().await {
-        Ok(line) => line,
-        Err(e) => {
-            tracing::error!("Failed to read from subprocess: {:?}", e);
+    let output = match stream.next().await {
+        Some(output) => match output {
+            Ok(output) => output,
+            Err(e) => {
+                tracing::error!("Failed to process text: {:?}", e);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        },
+        None => {
+            tracing::error!("No output from pipeline");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
-    let json: serde_json::Value = match serde_json::from_str(&line) {
+    let result_string = match output {
+        Input::String(s) => s,
+        _ => {
+            tracing::error!("Unexpected output type from pipeline");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let json: Vec<serde_json::Value> = match serde_json::from_str(&result_string) {
         Ok(json) => json,
         Err(e) => {
             tracing::error!("Failed to parse JSON response: {:?}", e);
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
+
     let result = json
-        .get("errs")
-        .and_then(|errs| errs.as_array())
-        .map(|x| {
-            x.iter()
-                .filter_map(|x| {
-                    let array = x.as_array()?;
-                    if array.len() < 7 {
-                        return None;
-                    }
-                    Some(GramcheckErrResponse {
-                        error_text: array[0].as_str()?.to_string(),
-                        start_index: array[1].as_i64()? as u32,
-                        end_index: array[2].as_i64()? as u32,
-                        error_code: array[3].as_str()?.to_string(),
-                        description: array[4].as_str()?.to_string(),
-                        suggestions: array[5]
-                            .as_array()?
-                            .iter()
-                            .filter_map(|s| s.as_str().map(|s| s.to_string()))
-                            .collect(),
-                        title: array[6].as_str()?.to_string(),
-                    })
-                })
-                .collect::<Vec<_>>()
+        .iter()
+        .filter_map(|obj| {
+            let form = obj.get("form")?.as_str()?.to_string();
+            let beg = obj.get("beg")?.as_u64()? as u32;
+            let end = obj.get("end")?.as_u64()? as u32;
+            let err = obj.get("err")?.as_str()?.to_string();
+            let msg = obj.get("msg")?.as_array()?;
+            let rep = obj
+                .get("rep")?
+                .as_array()?
+                .iter()
+                .filter_map(|s| s.as_str().map(|s| s.to_string()))
+                .collect();
+
+            Some(GramcheckErrResponse {
+                error_text: form,
+                start_index: beg,
+                end_index: end,
+                error_code: err,
+                title: msg.get(0)?.as_str()?.to_string(),
+                description: msg
+                    .get(1)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                suggestions: rep,
+            })
         })
-        .unwrap_or_default();
+        .collect::<Vec<_>>();
 
     Json(GramcheckResponse {
         text: text.to_string(),
@@ -109,51 +154,7 @@ async fn process(
     .into_response()
 }
 
-const PAGE: &str = r#"
-<!doctype html>
-<html>
-<head>
-<title>Divvun Grammar</title>
-<meta charset="utf-8">
-<style>
-.container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-}
-
-</style>
-</head>
-<body>
-<div class="container">
-<h2>Language: %LANG%</h2>
-<textarea class="text"></textarea>
-<div>
-Result:
-<pre class="result"></pre>
-</div>
-<button class="doit">
-Run grammar
-</button>
-<script>
-document.querySelector(".doit").addEventListener("click", () => {
-    const text = document.querySelector(".text").value;
-    fetch(location.href, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ text }),
-    }).then((r) => r.json()).then((r) => {
-        document.querySelector(".result").textContent = JSON.stringify(r, null, 2);
-    });
-});
-</script>
-</div>
-</body>
-</html>
-"#;
+const PAGE: &str = include_str!("../index.html");
 
 #[derive(Debug, Clone)]
 struct Language(String);
@@ -171,7 +172,7 @@ async fn health_check() -> impl IntoResponse {
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    /// Path to the grammar bundle file
+    /// Path to the grammar bundle file (.drb)
     #[arg(required = true)]
     bundle_path: String,
 
@@ -196,41 +197,32 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
     let path = Path::new(&cli.bundle_path)
         .canonicalize()
         .context("Failed to canonicalize bundle path")?;
-    let parent_path = path
-        .parent()
-        .context("Bundle path has no parent directory")?
-        .to_path_buf();
+
     let file_name = path
         .file_name()
         .context("Bundle path has no file name")?
         .to_str()
         .context("Bundle file name is not valid UTF-8")?
         .to_string();
+
     let lang = file_name
         .split('.')
         .next()
         .context("Bundle file name is empty")?
         .to_string();
 
-    tracing::info!("Parent path: {}", parent_path.display());
-    tracing::info!("File name: {}", file_name);
+    tracing::info!("Loading grammar bundle from: {}", path.display());
+    tracing::info!("Language: {}", lang);
 
-    let bundle_path = cli.bundle_path.clone();
-    let pool = subterm::SubprocessPool::new(
-        move || {
-            let mut cmd = tokio::process::Command::new("divvun-checker");
-            cmd.arg("-a").arg(&bundle_path);
-            cmd
-        },
-        4,
-    )
-    .await
-    .context("Failed to create subprocess pool - ensure divvun-checker is installed")?;
+    let bundle = Arc::new(
+        Bundle::from_bundle(&path)
+            .context("Failed to load grammar bundle - ensure the .drb file is valid")?,
+    );
 
     let app = Route::new()
         .at("/", post(process).get(process_get))
         .at("/health", get(health_check))
-        .data(pool)
+        .data(bundle)
         .data(Language(lang))
         .with(Cors::default());
 
