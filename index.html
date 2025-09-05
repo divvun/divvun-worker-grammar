@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Divvun Grammar</title>
+    <meta charset="utf-8">
+    <style>
+      .container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Language: %LANG%</h2>
+      <textarea class="text"></textarea>
+      <div>
+        Result:
+        <pre class="result"></pre>
+      </div>
+      <button class="doit">
+        Run grammar
+      </button>
+      <div>
+        <label>
+          <input type="checkbox" class="is-utf16" checked>
+          Is UTF-16?
+        </label>
+      </div>
+      <div>
+        <label>Language override<br>
+          <input
+            type="text"
+            class="lang-override"
+            placeholder="e.g. sms, se, etc"
+          >
+        </label>
+      </div>
+      <script>
+        document.querySelector(".doit").addEventListener(
+          "click",
+          () => {
+            const isUtf16 =
+              document.querySelector(".is-utf16").checked;
+            const params = new URLSearchParams();
+            if (isUtf16) {
+              params.set("encoding", "utf-16");
+            } else {
+              params.set("encoding", "utf-8");
+            }
+            const url = location.href.split("?")[0] + "?" +
+              params.toString();
+            const text = document.querySelector(".text").value;
+
+            const headers = {
+              "Content-Type": "application/json",
+            };
+
+            if (
+              document.querySelector(".lang-override").value !== ""
+            ) {
+              headers["Accept-Language"] =
+                document.querySelector(".lang-override").value;
+            }
+
+            fetch(url, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ text }),
+            }).then((r) => r.json()).then((r) => {
+              document.querySelector(".result").textContent = JSON
+                .stringify(r, null, 2);
+            });
+          },
+        );
+      </script>
+    </div>
+  </body>
+</html>
