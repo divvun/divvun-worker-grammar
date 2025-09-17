@@ -595,7 +595,7 @@
               headers["Accept-Language"] = langOverride;
             }
 
-            const response = await fetch('/preferences', { headers });
+            const response = await fetch(location.href + '/preferences', { headers });
             const data = await response.json();
 
             console.log(data)
