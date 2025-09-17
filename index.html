@@ -38,7 +38,51 @@
           >
         </label>
       </div>
+      <div class="preferences-section">
+        <h3>Preferences</h3>
+        <div class="preferences-list">
+          <!-- Preferences will be populated here -->
+        </div>
+      </div>
       <script>
+        // Fetch and populate preferences on page load
+        async function loadPreferences() {
+          try {
+            const response = await fetch('/preferences');
+            const data = await response.json();
+            const preferencesList = document.querySelector('.preferences-list');
+
+            console.log(data)
+
+            if (data.error_tags) {
+              for (const [key, value] of Object.entries(data.error_tags)) {
+                const label = document.createElement('label');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = key;
+                checkbox.className = 'preference-checkbox';
+
+                label.appendChild(checkbox);
+                label.appendChild(document.createTextNode('Ignore: ' + value + ' ('));
+                const code = document.createElement('code');
+                code.textContent = key;
+                label.appendChild(code);
+                label.appendChild(document.createTextNode(')'));
+
+                preferencesList.appendChild(label);
+                preferencesList.appendChild(document.createElement('br'));
+              }
+            } else {
+              preferencesList.textContent = 'No preferences available';
+            }
+          } catch (error) {
+            console.error('Failed to load preferences:', error);
+            document.querySelector('.preferences-list').textContent = 'Failed to load preferences';
+          }
+        }
+
+        loadPreferences();
+
         document.querySelector(".doit").addEventListener(
           "click",
           () => {
@@ -65,10 +109,20 @@
                 document.querySelector(".lang-override").value;
             }
 
+            // Collect checked preferences
+            const checkedPreferences = Array.from(
+              document.querySelectorAll(".preference-checkbox:checked")
+            ).map(checkbox => checkbox.value);
+
+            const payload = { text };
+            if (checkedPreferences.length > 0) {
+              payload.ignore = checkedPreferences;
+            }
+
             fetch(url, {
               method: "POST",
               headers,
-              body: JSON.stringify({ text }),
+              body: JSON.stringify(payload),
             }).then((r) => r.json()).then((r) => {
               document.querySelector(".result").textContent = JSON
                 .stringify(r, null, 2);

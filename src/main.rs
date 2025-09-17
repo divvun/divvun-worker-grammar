@@ -1,6 +1,10 @@
 use anyhow::Context;
 use clap::Parser;
-use divvun_runtime::{modules::Input, util::parse_accept_language, Bundle};
+use divvun_runtime::{
+    modules::Input,
+    util::parse_accept_language,
+    Bundle,
+};
 use futures_util::StreamExt;
 use poem::{
     get, handler,
@@ -12,11 +16,14 @@ use poem::{
     EndpointExt, IntoResponse, Request, Route, Server,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::{path::Path, sync::Arc};
 
 #[derive(serde::Deserialize)]
 struct ProcessInput {
     text: String,
+    ignore: Option<Vec<String>>,
+    ignore_tags: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -39,6 +46,33 @@ pub struct GramcheckResponse {
 #[derive(Deserialize)]
 struct ProcessQuery {
     encoding: Option<String>,
+}
+
+#[handler]
+async fn preferences_get(Data(bundle): Data<&Arc<Bundle>>, req: &Request) -> impl IntoResponse {
+    // Extract and parse Accept-Language header for locale configuration
+    let locales = if let Some(accept_lang) = req.header("Accept-Language") {
+        parse_accept_language(accept_lang)
+            .into_iter()
+            .map(|(lang_id, _)| lang_id.to_string())
+            .collect::<Vec<String>>()
+    } else {
+        Vec::new()
+    };
+
+    let Some(suggest) = bundle.command::<divvun_runtime::modules::divvun::Suggest>("suggest")
+    else {
+        tracing::error!("Suggest command not found in bundle");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+
+    let locales = locales.iter().map(|x| &**x).collect::<Vec<&str>>();
+    let prefs = suggest.error_preferences(&locales);
+
+    Json(json!({
+        "error_tags": prefs,
+    }))
+    .into_response()
 }
 
 #[handler]
@@ -69,11 +103,21 @@ async fn process(
     };
 
     // Build configuration with locales for suggestions
-    let config = serde_json::json!({
-        "suggest": {
-            "locales": locales,
-            "encoding": if is_utf16 { "utf-16" } else { "utf-8" },
+    let mut suggest_config = serde_json::json!({
+        "locales": locales,
+        "encoding": if is_utf16 { "utf-16" } else { "utf-8" },
+    });
+
+    // Handle ignore list - prefer 'ignore' over deprecated 'ignore_tags'
+    let ignore_list = body.ignore.as_ref().or(body.ignore_tags.as_ref());
+    if let Some(ignore_list) = ignore_list {
+        if !ignore_list.is_empty() {
+            suggest_config["ignore"] = serde_json::json!(ignore_list);
         }
+    }
+
+    let config = serde_json::json!({
+        "suggest": suggest_config
     });
 
     let mut pipeline = match bundle.create(config).await {
@@ -223,6 +267,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
 
     let app = Route::new()
         .at("/", post(process).get(process_get))
+        .at("/preferences", get(preferences_get))
         .at("/health", get(health_check))
         .data(bundle)
         .data(Language(lang))
