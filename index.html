@@ -154,23 +154,164 @@
         gap: 0.5rem;
       }
 
+      .results-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
       .results-section h3 {
         font-weight: 500;
         color: #555;
         margin: 0;
       }
 
-      .result {
+      .view-toggle {
+        display: flex;
+        gap: 0;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .toggle-btn {
+        background: #fff;
+        border: none;
+        padding: 0.4rem 0.8rem;
+        font-size: 12px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        border-right: 1px solid #e0e0e0;
+      }
+
+      .toggle-btn:last-child {
+        border-right: none;
+      }
+
+      .toggle-btn.active {
+        background: #3498db;
+        color: white;
+      }
+
+      .toggle-btn:hover:not(.active) {
+        background: #f8f9fa;
+      }
+
+      .results-content {
         background: #f8f9fa;
         border: 1px solid #e9ecef;
         border-radius: 6px;
         padding: 1rem;
+        flex: 1;
+        overflow-y: auto;
+        min-height: 200px;
+      }
+
+      .formatted-view {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .text-display {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        padding: 1rem;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 14px;
+        line-height: 1.5;
+        word-wrap: break-word;
+      }
+
+      .error-highlight {
+        border-bottom: 2px solid #3498db;
+        cursor: pointer;
+        position: relative;
+      }
+
+      .error-highlight:hover {
+        background-color: rgba(52, 152, 219, 0.1);
+      }
+
+      .error-highlight.selected {
+        background-color: rgba(52, 152, 219, 0.2);
+      }
+
+      .error-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .error-item {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        padding: 1rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+
+      .error-item.highlighted {
+        border-color: #3498db;
+        box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+      }
+
+      .error-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.5rem;
+      }
+
+      .error-text {
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        background: #f8f9fa;
+        padding: 0.2rem 0.4rem;
+        border-radius: 3px;
+        font-weight: bold;
+      }
+
+      .error-position {
+        color: #666;
+        font-size: 12px;
+      }
+
+      .error-title {
+        font-weight: 500;
+        color: #2c3e50;
+        margin-bottom: 0.25rem;
+      }
+
+      .error-description {
+        color: #666;
+        font-size: 14px;
+        margin-bottom: 0.5rem;
+      }
+
+      .suggestions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+      }
+
+      .suggestion {
+        background: #e9ecef;
+        padding: 0.2rem 0.4rem;
+        border-radius: 3px;
+        font-size: 12px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      }
+
+      .json-view {
         font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         font-size: 13px;
         white-space: pre-wrap;
         overflow-x: auto;
-        min-height: 100px;
-        flex: 1;
+        margin: 0;
+        background: transparent;
+        border: none;
+        padding: 0;
       }
 
 
@@ -295,8 +436,20 @@
         </button>
 
         <div class="results-section">
-          <h3>Results:</h3>
-          <pre class="result">Results will appear here...</pre>
+          <div class="results-header">
+            <h3>Results:</h3>
+            <div class="view-toggle">
+              <button class="toggle-btn active" data-view="formatted">Formatted</button>
+              <button class="toggle-btn" data-view="json">JSON</button>
+            </div>
+          </div>
+          <div class="results-content">
+            <div class="formatted-view" id="formatted-view">
+              <div class="text-display" id="text-display">Results will appear here...</div>
+              <div class="error-list" id="error-list"></div>
+            </div>
+            <pre class="json-view" id="json-view" style="display: none;">Results will appear here...</pre>
+          </div>
         </div>
       </div>
 
@@ -313,6 +466,116 @@
       </div>
     </div>
       <script>
+        // View toggle functionality
+        function initViewToggle() {
+          document.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const view = btn.dataset.view;
+
+              // Update button states
+              document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+              btn.classList.add('active');
+
+              // Toggle views
+              if (view === 'formatted') {
+                document.getElementById('formatted-view').style.display = 'flex';
+                document.getElementById('json-view').style.display = 'none';
+              } else {
+                document.getElementById('formatted-view').style.display = 'none';
+                document.getElementById('json-view').style.display = 'block';
+              }
+            });
+          });
+        }
+
+        // Render formatted view
+        function renderFormattedView(data) {
+          const textDisplay = document.getElementById('text-display');
+          const errorList = document.getElementById('error-list');
+
+          if (!data.errs || data.errs.length === 0) {
+            textDisplay.textContent = data.text || 'No text provided';
+            errorList.innerHTML = '<div style="color: #27ae60; font-weight: 500;">✓ No errors found!</div>';
+            return;
+          }
+
+          // Create text with highlighted errors
+          let html = '';
+          let lastIndex = 0;
+
+          data.errs.forEach((error, index) => {
+            // Add text before error
+            html += escapeHtml(data.text.substring(lastIndex, error.start_index));
+
+            // Add highlighted error
+            html += `<span class="error-highlight" data-error-index="${index}">${escapeHtml(error.error_text)}</span>`;
+
+            lastIndex = error.end_index;
+          });
+
+          // Add remaining text
+          html += escapeHtml(data.text.substring(lastIndex));
+          textDisplay.innerHTML = html;
+
+          // Create error list
+          let errorListHtml = '';
+          data.errs.forEach((error, index) => {
+            const suggestions = error.suggestions.map(s => `<span class="suggestion">${escapeHtml(s)}</span>`).join('');
+
+            errorListHtml += `
+              <div class="error-item" data-error-index="${index}">
+                <div class="error-header">
+                  <span class="error-text">${escapeHtml(error.error_text)}</span>
+                  <span class="error-position">(${error.start_index}-${error.end_index})</span>
+                </div>
+                <div class="error-title">${escapeHtml(error.title)}</div>
+                <div class="error-description">${escapeHtml(error.description)}</div>
+                <div class="suggestions">${suggestions}</div>
+              </div>
+            `;
+          });
+
+          errorList.innerHTML = errorListHtml;
+        }
+
+        // Render JSON view
+        function renderJsonView(data) {
+          document.getElementById('json-view').textContent = JSON.stringify(data, null, 2);
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+          const div = document.createElement('div');
+          div.textContent = text;
+          return div.innerHTML;
+        }
+
+        // Add click handlers for error highlighting
+        function initErrorHighlighting() {
+          // Click on error highlights in text
+          document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('error-highlight')) {
+              const errorIndex = e.target.dataset.errorIndex;
+
+              // Remove previous selections
+              document.querySelectorAll('.error-highlight.selected').forEach(el => {
+                el.classList.remove('selected');
+              });
+              document.querySelectorAll('.error-item.highlighted').forEach(el => {
+                el.classList.remove('highlighted');
+              });
+
+              // Add selection
+              e.target.classList.add('selected');
+              const errorItem = document.querySelector(`.error-item[data-error-index="${errorIndex}"]`);
+              if (errorItem) {
+                errorItem.classList.add('highlighted');
+                errorItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }
+            }
+          });
+        }
+
         // Fetch and populate preferences on page load
         async function loadPreferences() {
           const refreshButton = document.querySelector('#refresh-preferences');
@@ -373,6 +636,10 @@
 
         loadPreferences();
 
+        // Initialize view functionality
+        initViewToggle();
+        initErrorHighlighting();
+
         // Add refresh button functionality
         document.querySelector("#refresh-preferences").addEventListener("click", loadPreferences);
 
@@ -388,7 +655,9 @@
             // Set loading state
             button.disabled = true;
             button.textContent = "Checking...";
-            resultElement.textContent = "Analyzing text...";
+            document.getElementById('text-display').textContent = "Analyzing text...";
+            document.getElementById('error-list').innerHTML = "";
+            document.getElementById('json-view').textContent = "Analyzing text...";
 
             try {
               const isUtf16 =
@@ -431,9 +700,15 @@
               });
 
               const result = await response.json();
-              resultElement.textContent = JSON.stringify(result, null, 2);
+
+              // Render both views
+              renderFormattedView(result);
+              renderJsonView(result);
             } catch (error) {
-              resultElement.textContent = "Error: " + error.message;
+              const errorMsg = "Error: " + error.message;
+              document.getElementById('text-display').textContent = errorMsg;
+              document.getElementById('error-list').innerHTML = "";
+              document.getElementById('json-view').textContent = errorMsg;
             } finally {
               // Reset button state
               button.disabled = false;
