@@ -4,55 +4,341 @@
     <title>Divvun Grammar</title>
     <meta charset="utf-8">
     <style>
-      .container {
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background-color: #f5f5f5;
+        min-height: 100vh;
+      }
+
+      .header {
+        background: #fff;
+        padding: 1rem 2rem;
+        border-bottom: 1px solid #e0e0e0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+
+      .header h1 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #2c3e50;
+      }
+
+      .main-container {
+        display: grid;
+        grid-template-columns: 1fr 600px;
+        gap: 2rem;
+        padding: 2rem;
+        min-height: calc(100vh - 80px);
+      }
+
+      .left-column {
+        background: #fff;
+        border-radius: 8px;
+        padding: 2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         display: flex;
         flex-direction: column;
+        gap: 1.5rem;
+      }
+
+      .right-column {
+        background: #fff;
+        border-radius: 8px;
+        padding: 2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        max-height: calc(100vh - 120px);
+        overflow-y: auto;
+      }
+
+      .textarea-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .textarea-container label {
+        font-weight: 500;
+        color: #555;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 200px;
+        padding: 1rem;
+        border: 2px solid #e0e0e0;
+        border-radius: 6px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 14px;
+        resize: vertical;
+        transition: border-color 0.2s;
+        flex: 1;
+      }
+
+      textarea:focus {
+        outline: none;
+        border-color: #3498db;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
         align-items: center;
-        gap: 16px;
+      }
+
+      .control-group {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .control-group label {
+        font-weight: 500;
+        color: #555;
+      }
+
+      input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        accent-color: #3498db;
+      }
+
+      input[type="text"] {
+        padding: 0.5rem;
+        border: 2px solid #e0e0e0;
+        border-radius: 4px;
+        font-size: 14px;
+        transition: border-color 0.2s;
+      }
+
+      input[type="text"]:focus {
+        outline: none;
+        border-color: #3498db;
+      }
+
+      .run-button {
+        background: #3498db;
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        align-self: flex-start;
+      }
+
+      .run-button:hover {
+        background: #2980b9;
+      }
+
+      .run-button:disabled {
+        background: #bdc3c7;
+        cursor: not-allowed;
+      }
+
+      .results-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .results-section h3 {
+        font-weight: 500;
+        color: #555;
+        margin: 0;
+      }
+
+      .result {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 6px;
+        padding: 1rem;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 13px;
+        white-space: pre-wrap;
+        overflow-x: auto;
+        min-height: 100px;
+        flex: 1;
+      }
+
+
+      .preferences-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 0.5rem;
+      }
+
+      .preferences-header h3 {
+        margin: 0;
+        color: #2c3e50;
+        font-weight: 600;
+      }
+
+      .refresh-button {
+        background: #27ae60;
+        color: white;
+        border: none;
+        padding: 0.4rem 0.8rem;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      .refresh-button:hover {
+        background: #219a52;
+      }
+
+      .refresh-button:disabled {
+        background: #bdc3c7;
+        cursor: not-allowed;
+      }
+
+      .preferences-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .preferences-list label {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+        cursor: pointer;
+        line-height: 1.4;
+      }
+
+      .preferences-list label:hover {
+        background: #f8f9fa;
+      }
+
+      .preferences-list input[type="checkbox"] {
+        margin-top: 2px;
+        flex-shrink: 0;
+      }
+
+      .preferences-list code {
+        background: #e9ecef;
+        padding: 0.2rem 0.4rem;
+        border-radius: 3px;
+        font-size: 12px;
+        color: #495057;
+      }
+
+      @media (max-width: 1024px) {
+        .main-container {
+          grid-template-columns: 1fr;
+          gap: 1rem;
+          padding: 1rem;
+        }
+
+        .right-column {
+          max-height: none;
+          order: -1;
+        }
+
+        .header {
+          padding: 1rem;
+        }
       }
     </style>
   </head>
   <body>
-    <div class="container">
-      <h2>Language: %LANG%</h2>
-      <textarea class="text"></textarea>
-      <div>
-        Result:
-        <pre class="result"></pre>
-      </div>
-      <button class="doit">
-        Run grammar
-      </button>
-      <div>
-        <label>
-          <input type="checkbox" class="is-utf16" checked>
-          Is UTF-16?
-        </label>
-      </div>
-      <div>
-        <label>Language override<br>
-          <input
-            type="text"
-            class="lang-override"
-            placeholder="e.g. sms, se, etc"
-          >
-        </label>
-      </div>
-      <div class="preferences-section">
-        <h3>Preferences</h3>
-        <div class="preferences-list">
-          <!-- Preferences will be populated here -->
+    <div class="header">
+      <h1>Divvun Grammar Checker - Language: %LANG%</h1>
+    </div>
+
+    <div class="main-container">
+      <div class="left-column">
+        <div class="textarea-container">
+          <label for="text">Enter text to check:</label>
+          <textarea id="text" class="text" placeholder="Type or paste your text here..."></textarea>
+        </div>
+
+        <div class="controls">
+          <div class="control-group">
+            <input type="checkbox" id="is-utf16" class="is-utf16" checked>
+            <label for="is-utf16">UTF-16 encoding</label>
+          </div>
+
+          <div class="control-group">
+            <label for="lang-override">Language override:</label>
+            <input
+              type="text"
+              id="lang-override"
+              class="lang-override"
+              placeholder="e.g. sms, se, etc"
+            >
+          </div>
+        </div>
+
+        <button class="run-button doit">
+          Run Grammar Check
+        </button>
+
+        <div class="results-section">
+          <h3>Results:</h3>
+          <pre class="result">Results will appear here...</pre>
         </div>
       </div>
+
+      <div class="right-column">
+        <div class="preferences-section">
+          <div class="preferences-header">
+            <h3>Ignore Preferences</h3>
+            <button style="display: none" class="refresh-button" id="refresh-preferences">Refresh</button>
+          </div>
+          <div class="preferences-list">
+            <!-- Preferences will be populated here -->
+          </div>
+        </div>
+      </div>
+    </div>
       <script>
         // Fetch and populate preferences on page load
         async function loadPreferences() {
+          const refreshButton = document.querySelector('#refresh-preferences');
+          const preferencesList = document.querySelector('.preferences-list');
+
           try {
-            const response = await fetch('/preferences');
+            // Set loading state
+            if (refreshButton) {
+              refreshButton.disabled = true;
+              refreshButton.textContent = 'Loading...';
+            }
+            preferencesList.innerHTML = 'Loading preferences...';
+
+            const headers = {};
+            const langOverride = document.querySelector(".lang-override").value;
+            if (langOverride !== "") {
+              headers["Accept-Language"] = langOverride;
+            }
+
+            const response = await fetch('/preferences', { headers });
             const data = await response.json();
-            const preferencesList = document.querySelector('.preferences-list');
 
             console.log(data)
+
+            // Clear existing preferences
+            preferencesList.innerHTML = '';
 
             if (data.error_tags) {
               for (const [key, value] of Object.entries(data.error_tags)) {
@@ -63,70 +349,96 @@
                 checkbox.className = 'preference-checkbox';
 
                 label.appendChild(checkbox);
-                label.appendChild(document.createTextNode('Ignore: ' + value + ' ('));
+                label.appendChild(document.createTextNode(value));
                 const code = document.createElement('code');
                 code.textContent = key;
                 label.appendChild(code);
-                label.appendChild(document.createTextNode(')'));
 
                 preferencesList.appendChild(label);
-                preferencesList.appendChild(document.createElement('br'));
               }
             } else {
               preferencesList.textContent = 'No preferences available';
             }
           } catch (error) {
             console.error('Failed to load preferences:', error);
-            document.querySelector('.preferences-list').textContent = 'Failed to load preferences';
+            preferencesList.textContent = 'Failed to load preferences';
+          } finally {
+            // Reset button state
+            if (refreshButton) {
+              refreshButton.disabled = false;
+              refreshButton.textContent = 'Refresh';
+            }
           }
         }
 
         loadPreferences();
 
+        // Add refresh button functionality
+        document.querySelector("#refresh-preferences").addEventListener("click", loadPreferences);
+
+        // Reload preferences when language override changes
+        document.querySelector(".lang-override").addEventListener("blur", loadPreferences);
+
         document.querySelector(".doit").addEventListener(
           "click",
-          () => {
-            const isUtf16 =
-              document.querySelector(".is-utf16").checked;
-            const params = new URLSearchParams();
-            if (isUtf16) {
-              params.set("encoding", "utf-16");
-            } else {
-              params.set("encoding", "utf-8");
+          async () => {
+            const button = document.querySelector(".doit");
+            const resultElement = document.querySelector(".result");
+
+            // Set loading state
+            button.disabled = true;
+            button.textContent = "Checking...";
+            resultElement.textContent = "Analyzing text...";
+
+            try {
+              const isUtf16 =
+                document.querySelector(".is-utf16").checked;
+              const params = new URLSearchParams();
+              if (isUtf16) {
+                params.set("encoding", "utf-16");
+              } else {
+                params.set("encoding", "utf-8");
+              }
+              const url = location.href.split("?")[0] + "?" +
+                params.toString();
+              const text = document.querySelector(".text").value;
+
+              const headers = {
+                "Content-Type": "application/json",
+              };
+
+              if (
+                document.querySelector(".lang-override").value !== ""
+              ) {
+                headers["Accept-Language"] =
+                  document.querySelector(".lang-override").value;
+              }
+
+              // Collect checked preferences
+              const checkedPreferences = Array.from(
+                document.querySelectorAll(".preference-checkbox:checked")
+              ).map(checkbox => checkbox.value);
+
+              const payload = { text };
+              if (checkedPreferences.length > 0) {
+                payload.ignore = checkedPreferences;
+              }
+
+              const response = await fetch(url, {
+                method: "POST",
+                headers,
+                body: JSON.stringify(payload),
+              });
+
+              const result = await response.json();
+              resultElement.textContent = JSON.stringify(result, null, 2);
+            } catch (error) {
+              resultElement.textContent = "Error: " + error.message;
+            } finally {
+              // Reset button state
+              button.disabled = false;
+              button.textContent = "Run Grammar Check";
             }
-            const url = location.href.split("?")[0] + "?" +
-              params.toString();
-            const text = document.querySelector(".text").value;
-
-            const headers = {
-              "Content-Type": "application/json",
-            };
-
-            if (
-              document.querySelector(".lang-override").value !== ""
-            ) {
-              headers["Accept-Language"] =
-                document.querySelector(".lang-override").value;
-            }
-
-            // Collect checked preferences
-            const checkedPreferences = Array.from(
-              document.querySelectorAll(".preference-checkbox:checked")
-            ).map(checkbox => checkbox.value);
-
-            const payload = { text };
-            if (checkedPreferences.length > 0) {
-              payload.ignore = checkedPreferences;
-            }
-
-            fetch(url, {
-              method: "POST",
-              headers,
-              body: JSON.stringify(payload),
-            }).then((r) => r.json()).then((r) => {
-              document.querySelector(".result").textContent = JSON
-                .stringify(r, null, 2);
-            });
           },
         );
       </script>
