@@ -1,10 +1,6 @@
 use anyhow::Context;
 use clap::Parser;
-use divvun_runtime::{
-    modules::Input,
-    util::parse_accept_language,
-    Bundle,
-};
+use divvun_runtime::{modules::Input, util::parse_accept_language, Bundle};
 use futures_util::StreamExt;
 use poem::{
     get, handler,
@@ -49,9 +45,13 @@ struct ProcessQuery {
 }
 
 #[handler]
-async fn preferences_get(Data(bundle): Data<&Arc<Bundle>>, req: &Request) -> impl IntoResponse {
+async fn preferences_get(
+    Data(bundle): Data<&Arc<Bundle>>,
+    Data(lang): Data<&Language>,
+    req: &Request,
+) -> impl IntoResponse {
     // Extract and parse Accept-Language header for locale configuration
-    let locales = if let Some(accept_lang) = req.header("Accept-Language") {
+    let mut locales = if let Some(accept_lang) = req.header("Accept-Language") {
         parse_accept_language(accept_lang)
             .into_iter()
             .map(|(lang_id, _)| lang_id.to_string())
@@ -59,6 +59,13 @@ async fn preferences_get(Data(bundle): Data<&Arc<Bundle>>, req: &Request) -> imp
     } else {
         Vec::new()
     };
+
+    // Add default language as fallback if not already present
+    if let Language(Some(lang)) = lang {
+        if !locales.contains(&lang) {
+            locales.push(lang.to_string());
+        }
+    }
 
     let Some(suggest) = bundle.command::<divvun_runtime::modules::divvun::Suggest>("suggest")
     else {
@@ -78,6 +85,7 @@ async fn preferences_get(Data(bundle): Data<&Arc<Bundle>>, req: &Request) -> imp
 #[handler]
 async fn process(
     Data(bundle): Data<&Arc<Bundle>>,
+    Data(lang): Data<&Language>,
     Json(body): Json<ProcessInput>,
     Query(query): Query<ProcessQuery>,
     req: &Request,
@@ -93,7 +101,7 @@ async fn process(
     };
 
     // Extract and parse Accept-Language header for locale configuration
-    let locales = if let Some(accept_lang) = req.header("Accept-Language") {
+    let mut locales = if let Some(accept_lang) = req.header("Accept-Language") {
         parse_accept_language(accept_lang)
             .into_iter()
             .map(|(lang_id, _)| lang_id.to_string())
@@ -101,6 +109,13 @@ async fn process(
     } else {
         Vec::new()
     };
+
+    // Add default language as fallback if not already present
+    if let Language(Some(lang)) = lang {
+        if !locales.contains(lang) {
+            locales.push(lang.to_string());
+        }
+    }
 
     // Build configuration with locales for suggestions
     let mut suggest_config = serde_json::json!({
@@ -203,11 +218,11 @@ async fn process(
 const PAGE: &str = include_str!("../index.html");
 
 #[derive(Debug, Clone)]
-struct Language(String);
+struct Language(Option<String>);
 
 #[handler]
 async fn process_get(Data(lang): Data<&Language>) -> impl IntoResponse {
-    Html(PAGE.replace("%LANG%", &lang.0)).into_response()
+    Html(PAGE.replace("%LANG%", &lang.0.as_deref().unwrap_or("unknown"))).into_response()
 }
 
 #[handler]
@@ -221,6 +236,10 @@ struct Cli {
     /// Path to the grammar bundle file (.drb)
     #[arg(required = true)]
     bundle_path: String,
+
+    /// Default language for localizations (overrides bundle filename)
+    #[arg(long, env = "DEFAULT_LANGUAGE")]
+    language: Option<String>,
 
     /// Host to bind the server to
     #[arg(long, env = "HOST", default_value = "127.0.0.1")]
@@ -244,21 +263,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         .canonicalize()
         .context("Failed to canonicalize bundle path")?;
 
-    let file_name = path
-        .file_name()
-        .context("Bundle path has no file name")?
-        .to_str()
-        .context("Bundle file name is not valid UTF-8")?
-        .to_string();
-
-    let lang = file_name
-        .split('.')
-        .next()
-        .context("Bundle file name is empty")?
-        .to_string();
-
     tracing::info!("Loading grammar bundle from: {}", path.display());
-    tracing::info!("Language: {}", lang);
 
     let bundle = Arc::new(
         Bundle::from_bundle(&path)
@@ -270,7 +275,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         .at("/preferences", get(preferences_get))
         .at("/health", get(health_check))
         .data(bundle)
-        .data(Language(lang))
+        .data(Language(cli.language))
         .with(Cors::default());
 
     Server::new(TcpListener::bind((cli.host, cli.port)))

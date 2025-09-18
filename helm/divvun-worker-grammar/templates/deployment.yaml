@@ -39,6 +39,10 @@ spec:
               value: "0.0.0.0"
             - name: PORT
               value: "4000"
+            {{- if .Values.grammar.defaultLanguage }}
+            - name: DEFAULT_LANGUAGE
+              value: {{ .Values.grammar.defaultLanguage | quote }}
+            {{- end }}
           args:
             - "/data/{{ .Values.grammar.bundleFilename }}"
           volumeMounts:
