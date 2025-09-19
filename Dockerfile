@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:trixie as builder
+FROM rust:1.89-trixie AS builder
 
 WORKDIR /usr/src/app
 
@@ -21,7 +21,8 @@ COPY Cargo.toml Cargo.lock index.html ./
 COPY src ./src
 
 # Build for release
-RUN cargo build --release
+# Disable lld to avoid linking issue with cg3
+RUN RUSTFLAGS="-Clinker-features=-lld" cargo build --release
 
 # Runtime stage
 FROM debian:trixie-slim
