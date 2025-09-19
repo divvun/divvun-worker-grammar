@@ -82,7 +82,6 @@ async fn preferences_get(
     .into_response()
 }
 
-#[handler]
 async fn process(
     Data(bundle): Data<&Arc<Bundle>>,
     Data(lang): Data<&Language>,
@@ -226,8 +225,38 @@ async fn process_get(Data(lang): Data<&Language>) -> impl IntoResponse {
 }
 
 #[handler]
-async fn health_check() -> impl IntoResponse {
-    StatusCode::OK
+async fn process_post(
+    bundle: Data<&Arc<Bundle>>,
+    lang: Data<&Language>,
+    body: Json<ProcessInput>,
+    query: Query<ProcessQuery>,
+    req: &Request,
+) -> impl IntoResponse {
+    process(bundle, lang, body, query, req).await
+}
+
+#[handler]
+async fn health_check(req: &Request) -> impl IntoResponse {
+    let Some(bundle) = req.data::<Arc<Bundle>>() else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+
+    let Some(lang) = req.data::<Language>() else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+
+    let body = ProcessInput {
+        text: "".to_string(),
+        ignore: None,
+        ignore_tags: None,
+    };
+
+    let query = ProcessQuery { encoding: None };
+
+    let res = process(Data(bundle), Data(lang), Json(body), Query(query), req)
+        .await
+        .into_response();
+    res.status().into_response()
 }
 
 #[derive(Parser)]
@@ -271,7 +300,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
     );
 
     let app = Route::new()
-        .at("/", post(process).get(process_get))
+        .at("/", post(process_post).get(process_get))
         .at("/preferences", get(preferences_get))
         .at("/health", get(health_check))
         .data(bundle)
