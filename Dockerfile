@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.89-trixie AS builder
+FROM rust:trixie AS builder
 
 WORKDIR /usr/src/app
 
