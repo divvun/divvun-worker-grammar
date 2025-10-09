@@ -158,25 +158,24 @@ async fn process(
         }
     };
 
-    let result_string = match output {
-        Input::String(s) => s,
-        _ => {
+    let result_json = match output {
+        Input::Json(s) => match s {
+            serde_json::Value::Array(x) => x,
+            _ => {
+                tracing::error!("Expected JSON array from pipeline");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        },
+        x => {
+            tracing::error!("{:?}", x);
             tracing::error!("Unexpected output type from pipeline");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 
-    tracing::debug!("Pipeline output: {}", result_string);
+    tracing::debug!("Pipeline output: {:?}", result_json);
 
-    let json: Vec<serde_json::Value> = match serde_json::from_str(&result_string) {
-        Ok(json) => json,
-        Err(e) => {
-            tracing::error!("Failed to parse JSON response: {:?}", e);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    let result = json
+    let result = result_json
         .iter()
         .filter_map(|obj| {
             let form = obj.get("form")?.as_str()?.to_string();
