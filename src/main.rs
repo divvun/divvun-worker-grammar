@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::Parser;
-use divvun_runtime::{modules::Input, util::parse_accept_language, Bundle};
+use divvun_runtime::{bundle::Bundle, modules::Input, util::parse_accept_language};
 use futures_util::StreamExt;
 use poem::{
     get, handler,
