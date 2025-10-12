@@ -67,7 +67,7 @@ async fn preferences_get(
         }
     }
 
-    let Some(suggest) = bundle.command::<divvun_runtime::modules::divvun::Suggest>(None)
+    let Some((_, suggest)) = bundle.command::<divvun_runtime::modules::divvun::Suggest>(None)
     else {
         tracing::error!("Suggest command not found in bundle");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -130,8 +130,13 @@ async fn process(
         }
     }
 
+    let Some((id, _)) = bundle.command::<divvun_runtime::modules::divvun::Suggest>(None) else {
+        tracing::error!("Suggest command not found in bundle");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+
     let config = serde_json::json!({
-        "suggest": suggest_config
+        id: suggest_config
     });
 
     let mut pipeline = match bundle.create(config).await {
