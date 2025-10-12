@@ -13,7 +13,7 @@ use poem::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::Arc, time::Duration};
 
 #[derive(serde::Deserialize)]
 struct ProcessInput {
@@ -258,7 +258,7 @@ async fn health_check(req: &Request) -> impl IntoResponse {
     res.status().into_response()
 }
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// Path to the grammar bundle file (.drb)
@@ -280,23 +280,65 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
     let cli = Cli::parse();
-    Ok(run(cli).await?)
+
+    loop {
+        match run(cli.clone()).await {
+            Ok(_) => {
+                tracing::info!("Server stopped, restarting...");
+            }
+            Err(e) => {
+                tracing::error!("Server error: {:?}", e);
+                return Err(e);
+            }
+        }
+    }
 }
 
 async fn run(cli: Cli) -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-
     let path = Path::new(&cli.bundle_path)
         .canonicalize()
         .context("Failed to canonicalize bundle path")?;
 
     tracing::info!("Loading grammar bundle from: {}", path.display());
 
+    let initial_mtime = std::fs::metadata(&path)
+        .context("Failed to read bundle file metadata")?
+        .modified()
+        .context("Failed to get modification time")?;
+
     let bundle = Arc::new(
         Bundle::from_bundle(&path)
             .context("Failed to load grammar bundle - ensure the .drb file is valid")?,
     );
+
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
+
+    let watcher_path = path.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+        loop {
+            interval.tick().await;
+
+            match std::fs::metadata(&watcher_path) {
+                Ok(metadata) => match metadata.modified() {
+                    Ok(mtime) if mtime != initial_mtime => {
+                        tracing::info!("Bundle file changed, triggering restart");
+                        let _ = shutdown_tx.send(true);
+                        break;
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to get modification time: {}", e);
+                    }
+                    _ => {}
+                },
+                Err(e) => {
+                    tracing::error!("Failed to read bundle file metadata: {}", e);
+                }
+            }
+        }
+    });
 
     let app = Route::new()
         .at("/", post(process_post).get(process_get))
@@ -307,7 +349,13 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         .with(Cors::default());
 
     Server::new(TcpListener::bind((cli.host, cli.port)))
-        .run(app)
+        .run_with_graceful_shutdown(
+            app,
+            async move {
+                let _ = shutdown_rx.wait_for(|&v| v).await;
+            },
+            Some(Duration::from_secs(30)),
+        )
         .await?;
 
     Ok(())
