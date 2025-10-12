@@ -67,7 +67,7 @@ async fn preferences_get(
         }
     }
 
-    let Some(suggest) = bundle.command::<divvun_runtime::modules::divvun::Suggest>("suggest")
+    let Some(suggest) = bundle.command::<divvun_runtime::modules::divvun::Suggest>(None)
     else {
         tracing::error!("Suggest command not found in bundle");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();

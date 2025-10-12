@@ -644,8 +644,8 @@ dependencies = [
 
 [[package]]
 name = "divvun-runtime"
-version = "0.2.0"
-source = "git+https://github.com/divvun/divvun-runtime#6e125d2009c7ed55d9652249288690e063b1a238"
+version = "0.2.2"
+source = "git+https://github.com/divvun/divvun-runtime#51887fbc85b91969a0fe9d1402d247738aea9e55"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -687,8 +687,8 @@ dependencies = [
 
 [[package]]
 name = "divvun-runtime-macros"
-version = "0.2.0"
-source = "git+https://github.com/divvun/divvun-runtime#6e125d2009c7ed55d9652249288690e063b1a238"
+version = "0.2.2"
+source = "git+https://github.com/divvun/divvun-runtime#51887fbc85b91969a0fe9d1402d247738aea9e55"
 dependencies = [
  "proc-macro2",
  "quote",
