@@ -23,17 +23,9 @@ spec:
               containerPort: 4000
               protocol: TCP
           livenessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 30
-            periodSeconds: 10
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
           env:
             - name: HOST
               value: "0.0.0.0"
