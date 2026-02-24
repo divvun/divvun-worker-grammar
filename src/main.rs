@@ -130,6 +130,8 @@ async fn process(
         }
     }
 
+    tracing::info!("process: text={:?}, encoding={}", text, if is_utf16 { "utf-16" } else { "utf-8" });
+
     let Some((id, _)) = bundle.command::<divvun_runtime::modules::divvun::Suggest>(None) else {
         tracing::error!("Suggest command not found in bundle");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -139,6 +141,8 @@ async fn process(
         id: suggest_config
     });
 
+    tracing::debug!("process: config={config}");
+    tracing::debug!("process: creating pipeline");
     let mut pipeline = match bundle.create(config).await {
         Ok(pipeline) => pipeline,
         Err(e) => {
@@ -147,11 +151,16 @@ async fn process(
         }
     };
 
+    tracing::debug!("process: pipeline created, forwarding input");
     let mut stream = pipeline.forward(Input::String(text.to_string())).await;
 
+    tracing::debug!("process: awaiting stream.next()");
     let output = match stream.next().await {
         Some(output) => match output {
-            Ok(output) => output,
+            Ok(output) => {
+                tracing::debug!("process: got pipeline output");
+                output
+            }
             Err(e) => {
                 tracing::error!("Failed to process text: {:?}", e);
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -163,11 +172,25 @@ async fn process(
         }
     };
 
-    let result_json = match output {
+    let (result_text, result_errs) = match output {
         Input::Json(s) => match s {
-            serde_json::Value::Array(x) => x,
+            serde_json::Value::Object(obj) => {
+                let text = obj
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(text)
+                    .to_string();
+                let errs = match obj.get("errors") {
+                    Some(serde_json::Value::Array(x)) => x.clone(),
+                    _ => {
+                        tracing::error!("Expected 'errors' array in pipeline output");
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    }
+                };
+                (text, errs)
+            }
             _ => {
-                tracing::error!("Expected JSON array from pipeline");
+                tracing::error!("Expected JSON object from pipeline");
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         },
@@ -178,18 +201,27 @@ async fn process(
         }
     };
 
-    tracing::debug!("Pipeline output: {:?}", result_json);
+    tracing::debug!("Pipeline output: {:?}", result_errs);
 
-    let result = result_json
+    let result = result_errs
         .iter()
         .filter_map(|obj| {
             let form = obj.get("form")?.as_str()?.to_string();
-            let beg = obj.get("beg")?.as_u64()? as u32;
+            let beg = obj.get("start")?.as_u64()? as u32;
             let end = obj.get("end")?.as_u64()? as u32;
-            let err = obj.get("err")?.as_str()?.to_string();
-            let msg = obj.get("msg")?.as_array()?;
-            let rep = obj
-                .get("rep")?
+            let err = obj.get("error_id")?.as_str()?.to_string();
+            let title = obj
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let description = obj
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let suggestions = obj
+                .get("suggestions")?
                 .as_array()?
                 .iter()
                 .filter_map(|s| s.as_str().map(|s| s.to_string()))
@@ -200,19 +232,15 @@ async fn process(
                 start_index: beg,
                 end_index: end,
                 error_code: err,
-                title: msg.get(0)?.as_str()?.to_string(),
-                description: msg
-                    .get(1)
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string(),
-                suggestions: rep,
+                title,
+                description,
+                suggestions,
             })
         })
         .collect::<Vec<_>>();
 
     Json(GramcheckResponse {
-        text: text.to_string(),
+        text: result_text,
         errs: result,
     })
     .into_response()
@@ -248,9 +276,9 @@ async fn health_check(req: &Request) -> impl IntoResponse {
     let Some(lang) = req.data::<Language>() else {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
-
+    
     let body = ProcessInput {
-        text: "".to_string(),
+        text: "health check".to_string(),
         ignore: None,
         ignore_tags: None,
     };
@@ -260,6 +288,7 @@ async fn health_check(req: &Request) -> impl IntoResponse {
     let res = process(Data(bundle), Data(lang), Json(body), Query(query), req)
         .await
         .into_response();
+    
     res.status().into_response()
 }
 
@@ -315,6 +344,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
 
     let bundle = Arc::new(
         Bundle::from_bundle(&path)
+            .await
             .context("Failed to load grammar bundle - ensure the .drb file is valid")?,
     );
 
