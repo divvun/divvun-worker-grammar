@@ -1,12 +1,18 @@
 # Build stage
 FROM rust:trixie AS builder
 
+# Deno runs the ./x build orchestrator (sets up the static-lib sysroot)
+COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
+
 WORKDIR /usr/src/app
 
+# clang/clang++ are required: cg3-rs hardcodes them (with ThinLTO) for its cmake
+# and cc builds. lld is the matching LLVM linker (see linker wrapper below).
 RUN apt-get update && apt-get install -y \
-    curl \
     cmake \
     build-essential \
+    clang \
+    lld \
     bison \
     flex \
     pkg-config \
@@ -14,15 +20,22 @@ RUN apt-get update && apt-get install -y \
     libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy manifests
-COPY Cargo.toml Cargo.lock index.html ./
+# cg3's static libs contain clang ThinLTO bitcode. rustc would otherwise link
+# with its bundled rust-lld (LLVM version mismatch); force clang + system lld.
+# CARGO_TARGET_*_LINKER is honoured even though ./x sets its own RUSTFLAGS.
+RUN printf '#!/bin/sh\nexec clang -fuse-ld=lld "$@"\n' > /usr/local/bin/clang-lld \
+    && chmod +x /usr/local/bin/clang-lld
+ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/usr/local/bin/clang-lld
 
-# Copy source code
+# Copy the build orchestrator and sources
+COPY build ./build
+COPY x build.rs Cargo.toml Cargo.lock index.html ./
 COPY src ./src
 
-# Build for release
-# Disable lld to avoid linking issue with cg3
-RUN RUSTFLAGS="-Clinker-features=-lld" cargo build --release
+# Build release binary via ./x: downloads the static-lib sysroot (provides static
+# ICU via CG3_SYSROOT), then builds and strips the binary. An explicit --target
+# also avoids ./x's target-cpu=native (only set for native/no-target builds).
+RUN ./x build --target x86_64-unknown-linux-gnu
 
 # Runtime stage
 FROM debian:trixie-slim
@@ -38,7 +51,7 @@ RUN dpkg --add-architecture amd64 && \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder stage
-COPY --from=builder /usr/src/app/target/release/divvun-worker-grammar /usr/local/bin/divvun-worker-grammar
+COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-gnu/release/divvun-worker-grammar /usr/local/bin/divvun-worker-grammar
 
 # Create non-root user
 RUN useradd -r -u 1000 grammar
