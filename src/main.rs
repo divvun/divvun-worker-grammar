@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::Parser;
-use divvun_runtime::{bundle::Bundle, modules::PipelineValue, util::parse_accept_language};
+use divvun_runtime::{bundle::Bundle, modules::Input, util::parse_accept_language};
 use futures_util::StreamExt;
 use poem::{
     get, handler,
@@ -152,7 +152,7 @@ async fn process(
     };
 
     tracing::debug!("process: pipeline created, forwarding input");
-    let mut stream = pipeline.forward(PipelineValue::String(text.to_string())).await;
+    let mut stream = pipeline.forward(Input::String(text.to_string())).await;
 
     tracing::debug!("process: awaiting stream.next()");
     let output = match stream.next().await {
@@ -173,7 +173,7 @@ async fn process(
     };
 
     let (result_text, result_errs) = match output {
-        PipelineValue::Json(s) => match s {
+        Input::Json(s) => match s {
             serde_json::Value::Object(obj) => {
                 let text = obj
                     .get("text")
