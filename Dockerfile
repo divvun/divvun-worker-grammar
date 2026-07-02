@@ -53,13 +53,6 @@ RUN dpkg --add-architecture amd64 && \
 # Copy the binary from builder stage
 COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-gnu/release/divvun-worker-grammar /usr/local/bin/divvun-worker-grammar
 
-# vislcg3's constraint-grammar engine recurses deeply. divvun_runtime runs each
-# cg3/hfst stage on a raw std::thread (no explicit stack size), which defaults to
-# 2 MiB — not enough for real grammars, so processing overflows the stack and the
-# process aborts with SIGSEGV. std::thread honours RUST_MIN_STACK for threads
-# spawned without an explicit size, so raise the default for every such thread.
-ENV RUST_MIN_STACK=67108864
-
 # Create non-root user
 RUN useradd -r -u 1000 grammar
 
