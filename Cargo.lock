@@ -362,7 +362,7 @@ dependencies = [
 [[package]]
 name = "box-format"
 version = "0.4.0"
-source = "git+https://github.com/bbqsrc/box#3cbd43858d9cd4a36222ae01720d83544e17ecde"
+source = "git+https://github.com/bbqsrc/box#950fdc9229032604c848d4ae7df330c69a7a7fd5"
 dependencies = [
  "async-walkdir",
  "blake3",
@@ -396,7 +396,7 @@ dependencies = [
 [[package]]
 name = "box-fst"
 version = "0.1.0"
-source = "git+https://github.com/bbqsrc/box#3cbd43858d9cd4a36222ae01720d83544e17ecde"
+source = "git+https://github.com/bbqsrc/box#950fdc9229032604c848d4ae7df330c69a7a7fd5"
 dependencies = [
  "fastvint",
  "hashbrown 0.15.5",
@@ -859,7 +859,7 @@ dependencies = [
 [[package]]
 name = "divvun-runtime"
 version = "0.4.0"
-source = "git+https://github.com/divvun/divvun-runtime#7c04d3d00fee2d5a9febbe671959c490035e66df"
+source = "git+https://github.com/divvun/divvun-runtime#af6e87379b6cb25ca4cef2b646507187a91c6c69"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -902,7 +902,7 @@ dependencies = [
 [[package]]
 name = "divvun-runtime-macros"
 version = "0.4.0"
-source = "git+https://github.com/divvun/divvun-runtime#7c04d3d00fee2d5a9febbe671959c490035e66df"
+source = "git+https://github.com/divvun/divvun-runtime#af6e87379b6cb25ca4cef2b646507187a91c6c69"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -912,7 +912,7 @@ dependencies = [
 
 [[package]]
 name = "divvun-worker-grammar"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1440,7 +1440,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 [[package]]
 name = "hfst"
 version = "0.1.0"
-source = "git+https://github.com/divvun/hfst-rs#6693e75f01907ca8a992a1f2c6cfde1a7264f297"
+source = "git+https://github.com/divvun/hfst-rs#c6d5fdf030bf977c1ba36f33ae67f2cb6cf4d975"
 dependencies = [
  "ariadne 0.5.1",
  "foma",
@@ -1463,7 +1463,7 @@ dependencies = [
 [[package]]
 name = "hfst-openfst"
 version = "0.1.0"
-source = "git+https://github.com/divvun/hfst-rs#6693e75f01907ca8a992a1f2c6cfde1a7264f297"
+source = "git+https://github.com/divvun/hfst-rs#c6d5fdf030bf977c1ba36f33ae67f2cb6cf4d975"
 dependencies = [
  "anyhow",
  "rustfst",
@@ -3300,7 +3300,7 @@ dependencies = [
 [[package]]
 name = "syntax-highlight"
 version = "0.1.0"
-source = "git+https://github.com/divvun/divvun-runtime#7c04d3d00fee2d5a9febbe671959c490035e66df"
+source = "git+https://github.com/divvun/divvun-runtime#af6e87379b6cb25ca4cef2b646507187a91c6c69"
 dependencies = [
  "once_cell",
  "syntect",
