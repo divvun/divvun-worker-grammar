@@ -80,6 +80,10 @@ readinessProbe:
   periodSeconds: 5
   timeoutSeconds: 5
 
+# Extra container env, appended after HOST/PORT/DEFAULT_LANGUAGE.
+# List form: [{name: RUST_LOG, value: "divvun_worker_grammar=debug"}]
+env: []
+
 nodeSelector: {}
 
 tolerations: []
