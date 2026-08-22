@@ -1,6 +1,23 @@
 # Default values for divvun-worker-grammar.
 replicaCount: 1
 
+# Deployment rollout strategy. Empty by default, which leaves the Kubernetes
+# default of RollingUpdate at 25%/25%.
+#
+# Set this when replicas are spread across a limited node pool with REQUIRED
+# podAntiAffinity. At replicaCount: 2 the 25%/25% default rounds to maxSurge 1
+# and maxUnavailable 0 (surge rounds up, unavailable rounds down), so a rollout
+# must place a third pod before retiring any old one. If every eligible node
+# already holds a replica that pod is unschedulable and the rollout never
+# completes. Inverting it retires first, freeing a node to reschedule onto:
+#
+#   strategy:
+#     type: RollingUpdate
+#     rollingUpdate:
+#       maxSurge: 0
+#       maxUnavailable: 1
+strategy: {}
+
 image:
   repository: ghcr.io/divvun/divvun-worker-grammar
   pullPolicy: IfNotPresent
