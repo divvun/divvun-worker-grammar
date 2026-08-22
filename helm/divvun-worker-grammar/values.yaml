@@ -1,6 +1,15 @@
 # Default values for divvun-worker-grammar.
 replicaCount: 1
 
+# Superseded ReplicaSets to keep. 10 is the Kubernetes default.
+revisionHistoryLimit: 10
+
+# Empty leaves the Kubernetes default (RollingUpdate 25%/25%), which at
+# replicaCount: 2 rounds to maxSurge 1 / maxUnavailable 0 — that deadlocks when
+# required podAntiAffinity already fills every eligible node. Set maxSurge: 0 and
+# maxUnavailable: 1 to retire first instead.
+strategy: {}
+
 image:
   repository: ghcr.io/divvun/divvun-worker-grammar
   pullPolicy: IfNotPresent
