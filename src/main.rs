@@ -267,29 +267,34 @@ async fn process_post(
     process(bundle, lang, body, query, req).await
 }
 
+/// Liveness/readiness endpoint. Deliberately does NOT run the grammar pipeline.
+///
+/// It used to call `process()` on the literal string "health check". Because
+/// Kubernetes probes both point here, that made probes roughly 30x the real
+/// request volume — 360 grammar passes an hour per replica against 9-14 actual
+/// user requests. Every one of them occupied the worker.
+///
+/// The failure mode that caused was not subtle: a real document arriving while
+/// probes were queued pushed the probe past its timeout, so liveness SIGKILLed a
+/// perfectly healthy process (exit 137, nothing in the logs) and readiness pulled
+/// every replica out of the load balancer at the same instant, returning 503s.
+/// The health check was the outage.
+///
+/// Checking the shared state is what a probe actually needs here: the bundle is
+/// loaded once at startup and `main` returns an error if that fails, so the
+/// server never binds without a valid bundle. If these are present, the process
+/// is up, its state is intact, and it is accepting connections.
+///
+/// This intentionally cannot detect a wedged pipeline. Running a full pass 6
+/// times a minute to catch that is a bad trade — it caused far more downtime
+/// than it ever detected. A pipeline that can wedge should be fixed there.
 #[handler]
 async fn health_check(req: &Request) -> impl IntoResponse {
-    let Some(bundle) = req.data::<Arc<Bundle>>() else {
+    if req.data::<Arc<Bundle>>().is_none() || req.data::<Language>().is_none() {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
+    }
 
-    let Some(lang) = req.data::<Language>() else {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-    
-    let body = ProcessInput {
-        text: "health check".to_string(),
-        ignore: None,
-        ignore_tags: None,
-    };
-
-    let query = ProcessQuery { encoding: None };
-
-    let res = process(Data(bundle), Data(lang), Json(body), Query(query), req)
-        .await
-        .into_response();
-    
-    res.status().into_response()
+    StatusCode::OK.into_response()
 }
 
 #[derive(Parser, Clone)]
