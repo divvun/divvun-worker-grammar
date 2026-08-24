@@ -80,6 +80,12 @@ readinessProbe:
   periodSeconds: 5
   timeoutSeconds: 5
 
+# Empty by default. Point this at /health/deep to run one real pipeline pass
+# before the pod is considered started — it runs only until first success, so a
+# bundle that cannot process anything stays visibly broken instead of passing
+# the cheap /health forever. Never point liveness or readiness at /health/deep.
+startupProbe: {}
+
 # Extra container env, appended after HOST/PORT/DEFAULT_LANGUAGE.
 # List form: [{name: RUST_LOG, value: "divvun_worker_grammar=debug"}]
 env: []

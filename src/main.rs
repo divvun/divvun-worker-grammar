@@ -297,6 +297,46 @@ async fn health_check(req: &Request) -> impl IntoResponse {
     StatusCode::OK.into_response()
 }
 
+/// Deep health check: runs one real pass through the grammar pipeline.
+///
+/// Intended for a Kubernetes `startupProbe`, which runs only until its first
+/// success and then never runs again. That costs one pass per pod lifetime
+/// instead of the ~360 an hour the old `/health` cost, while still refusing to
+/// start a bundle that cannot process anything at all.
+///
+/// This exists because making `/health` cheap had a cost: grammar-fi-unstable
+/// overflows its stack on any input, and once the cheap check stopped exercising
+/// the pipeline the deployment reported 2/2 Ready while returning 502 to every
+/// real request — and its ChronicallyBrokenDeployment alert resolved itself.
+/// Silently-broken is worse than broken.
+///
+/// Do NOT point liveness or readiness at this. Pointing liveness here is what
+/// caused workers to SIGKILL each other under load in the first place.
+#[handler]
+async fn health_check_deep(req: &Request) -> impl IntoResponse {
+    let Some(bundle) = req.data::<Arc<Bundle>>() else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+
+    let Some(lang) = req.data::<Language>() else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+
+    let body = ProcessInput {
+        text: "health check".to_string(),
+        ignore: None,
+        ignore_tags: None,
+    };
+
+    let query = ProcessQuery { encoding: None };
+
+    let res = process(Data(bundle), Data(lang), Json(body), Query(query), req)
+        .await
+        .into_response();
+
+    res.status().into_response()
+}
+
 #[derive(Parser, Clone)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
@@ -384,6 +424,7 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         .at("/", post(process_post).get(process_get))
         .at("/preferences", get(preferences_get))
         .at("/health", get(health_check))
+        .at("/health/deep", get(health_check_deep))
         .data(bundle)
         .data(Language(cli.language))
         .with(Cors::default());
